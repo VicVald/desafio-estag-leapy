@@ -1,5 +1,21 @@
 -- Schemas fornecidos pelo usuário
 
+create table if not exists public.target_roles (
+  id serial not null,
+  date_created timestamp with time zone null,
+  date_updated timestamp with time zone null,
+  date_deleted timestamp without time zone null,
+  name character varying(255) not null,
+  description text null,
+  important_skills json null,
+  success_criteria character varying(255) null,
+  talent_id uuid null,
+  required_skills json null,
+  talent_current_skills json null,
+  match real null default '0'::real,
+  constraint target_roles_pkey primary key (id)
+) tablespace pg_default;
+
 create table if not exists public.internship_leaders (
   id serial not null,
   status character varying(255) not null default 'draft'::character varying,
@@ -7,7 +23,7 @@ create table if not exists public.internship_leaders (
   date_updated timestamp with time zone null,
   date_deleted timestamp without time zone null,
   phone_number character varying(255) not null,
-  user_id uuid not null,
+  user_id uuid null,
   position character varying(255) null,
   department character varying(255) null,
   constraint internship_leaders_pkey primary key (id),
@@ -24,7 +40,7 @@ create table if not exists public.talents (
   date_created timestamp with time zone null,
   date_updated timestamp with time zone null,
   date_deleted timestamp without time zone null,
-  user_id uuid not null,
+  user_id uuid null,
   phone_number character varying(255) not null,
   start_date timestamp without time zone null,
   end_date timestamp without time zone null,
@@ -60,21 +76,6 @@ create index if not exists idx_talents_pdi_plan_ready on public.talents using bt
 create index if not exists talents_target_role_id_idx on public.talents using btree (target_role_id) tablespace pg_default;
 create index if not exists talents_phone_idx on public.talents using btree (phone_number) tablespace pg_default;
 
-create table if not exists public.target_roles (
-  id serial not null,
-  date_created timestamp with time zone null,
-  date_updated timestamp with time zone null,
-  date_deleted timestamp with time zone null,
-  name character varying(255) not null,
-  description text null,
-  important_skills json null,
-  success_criteria character varying(255) null,
-  talent_id uuid null,
-  required_skills json null,
-  talent_current_skills json null,
-  match real null default '0'::real,
-  constraint target_roles_pkey primary key (id),
-  constraint target_roles_talent_id_foreign foreign key (talent_id) references talents (id) on delete cascade
-) tablespace pg_default;
+ALTER TABLE public.target_roles ADD CONSTRAINT target_roles_talent_id_foreign FOREIGN KEY (talent_id) REFERENCES public.talents (id) ON DELETE CASCADE;
 
 

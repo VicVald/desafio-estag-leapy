@@ -12,8 +12,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./seed/schema.sql:/docker-entrypoint-initdb.d/00_schema.sql:ro
-      - ./seed/seed.sql:/docker-entrypoint-initdb.d/10_seed.sql:ro
 
   directus:
     image: directus/directus:10
@@ -38,6 +36,39 @@ services:
       EXTENSIONS_AUTO_RELOAD: "true"
     volumes:
       - ./extensions:/directus/extensions
+
+  seeder:
+    image: postgres:15
+    container_name: leapy_seeder
+    depends_on:
+      - postgres
+      - directus
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-leapy}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: admin
+    volumes:
+      - ./seed:/seed:ro
+    command: >
+      sh -c "
+      apt-get update && apt-get install -y curl jq &&
+      until pg_isready -h postgres -p 5432 -U postgres; do echo 'Waiting for postgres...'; sleep 2; done &&
+      until curl -f http://directus:8055/server/health; do echo 'Waiting for directus...'; sleep 2; done &&
+      TOKEN=$(curl -s -X POST http://directus:8055/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"'${ADMIN_EMAIL}'\",\"password\":\"'${ADMIN_PASSWORD}'\"}' | jq -r .data.access_token) &&
+      for i in {1..20}; do
+        curl -s -X POST http://directus:8055/users -H 'Authorization: Bearer '$TOKEN -H 'Content-Type: application/json' -d '{\"email\":\"leader'$i'@example.com\",\"password\":\"password\"}'
+      done &&
+      for i in {1..100}; do
+        curl -s -X POST http://directus:8055/users -H 'Authorization: Bearer '$TOKEN -H 'Content-Type: application/json' -d '{\"email\":\"talent'$i'@example.com\",\"password\":\"password\"}'
+      done &&
+      psql -h postgres -U postgres -d leapy -f /seed/schema.sql &&
+      psql -h postgres -U postgres -d leapy -f /seed/seed.sql &&
+      echo 'Seeding completed successfully'
+      "
+    restart: "no"
 
 volumes:
   pg_data:
