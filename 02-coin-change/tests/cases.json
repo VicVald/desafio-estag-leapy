@@ -9,5 +9,9 @@
   {
     "input": { "coins": [5, 10, 25], "amount": 30 },
     "output": { "minCoins": 2 }
-  }
+  },
+
+
+  {"input": {"coins": "invalid", "amount": 11}, "output": {"minCoins": -1}},
+  {"input": {"coins": [1,2,5], "amount": -1}, "output": {"minCoins": -1}}
 ]

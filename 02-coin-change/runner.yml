@@ -1,2 +1,4 @@
-command: "node solution.js"
-workdir: "."
+command: 'sudo docker run --rm -i coin-change-solution'
+description: >
+  Comando de execução do desafio Coin Change.
+  O executor deve alimentar a entrada JSON via stdin e ler a saída JSON via stdout.

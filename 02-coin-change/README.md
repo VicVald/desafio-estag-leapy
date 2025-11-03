@@ -1,47 +1,58 @@
-# Desafio 02 — Coin Change
+# Como Rodar o Coin Change
 
-Implemente uma solução para o problema de Coin Change. Linguagem livre, mas você deve fornecer um `Dockerfile` e um `runner.yml` descrevendo como executar sua solução via CLI.
+## Pré-requisitos
+- Docker
+- Node.js (para os testes)
 
-## Contrato de I/O (obrigatório)
+## Passos para Executar
 
-- Entrada (stdin) JSON: `{ "coins": number[], "amount": number }`
-- Saída (stdout) JSON: `{ "minCoins": number }`
+1. **Navegue até o diretório do desafio:**
+   ```bash
+   cd 02-coin-change
+   ```
 
-Exemplo:
+2. **Construa a imagem Docker:**
+   ```bash
+   docker build -t coin-change-solution .
+   ```
 
-```json
-{ "coins": [1, 2, 5], "amount": 11 }
-```
+3. **Instale as dependências dos testes:**
+   ```bash
+   npm install
+   ```
 
-```json
-{ "minCoins": 3 }
-```
+4. **Execute os testes:**
+   ```bash
+   npm test
+   ```
 
-## Como rodar os testes
-
-Localmente:
-
+## Teste Manual
+Para testar com entrada específica:
 ```bash
-npm install
-npm test
+echo '{"coins": [1,2,5], "amount": 11}' | docker run --rm -i coin-change-solution
 ```
+Saída esperada: `{"minCoins": 3}`
 
-No CI (GitHub Actions) os testes serão executados automaticamente ao abrir o PR.
+## Por que Não Usar o Greedy Algorithm?
 
-## Requisitos
+O algoritmo guloso (greedy) funciona bem para sistemas de moedas canônicas, como as moedas dos EUA (1¢, 5¢, 10¢, 25¢), onde sempre escolher a maior moeda disponível leva à solução ótima.
 
-- Fornecer `Dockerfile` que constrói uma imagem capaz de executar o comando definido em `runner.yml`.
-- Manter o contrato de I/O e saída estritamente conforme descrito.
-- Opcional: testes próprios adicionais e documentação.
+No entanto, para sistemas de moedas arbitrários, o greedy pode falhar. Por exemplo:
 
-## Arquivos fornecidos
+- Moedas: [1, 3, 4]
+- Valor: 6
 
-- `tests/cases.json` — casos de teste oficiais
-- `tests/harness.js` — test runner genérico
-- `runner.yml` — contrato do comando de execução
+**Greedy:** 4 + 1 + 1 = 3 moedas  
+**Ótimo:** 3 + 3 = 2 moedas
 
-## Observações importantes
+Como o problema permite moedas arbitrárias, usei Programação Dinâmica para garantir a solução ótima em todos os casos.
 
-- Você deve propor e implementar sua própria solução. Nenhum código de solução está incluído neste repositório.
-- Garanta que sua solução siga o contrato de I/O descrito acima.
-- O `Dockerfile` deve ser capaz de construir uma imagem que execute o comando definido em `runner.yml`.
+## Novos Casos de Teste Adicionados
+
+Além dos casos oficiais em `tests/cases.json`, adicionei testes para edge cases:
+
+1. **Valor negativo:** `{"coins": [1,2,5], "amount": -1}` → `{"minCoins": -1}`
+2. **Moedas inválidas:** `{"coins": "invalid", "amount": 11}` → `{"minCoins": -1}`
+
+
+Estes casos garantem robustez contra entradas inválidas e edge cases.
