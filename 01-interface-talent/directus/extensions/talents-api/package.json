@@ -1,0 +1,23 @@
+{
+  "name": "talents-api",
+  "version": "1.0.0",
+  "description": "Custom API endpoint for talents with advanced filtering and pagination",
+  "main": "src/index.js",
+  "directus:extension": {
+    "type": "endpoint",
+    "path": "src/index.js",
+    "source": "src/index.js",
+    "host": "^10.0.0"
+  },
+  "scripts": {
+    "build": "echo 'No build step required'"
+  },
+  "keywords": [
+    "directus",
+    "extension",
+    "api",
+    "talents"
+  ],
+  "author": "Victor Hugo",
+  "license": "MIT"
+}
