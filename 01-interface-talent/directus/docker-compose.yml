@@ -37,6 +37,16 @@ services:
     volumes:
       - ./extensions:/directus/extensions
 
+  frontend:
+    build: ../interface-talent
+    container_name: leapy_frontend
+    depends_on:
+      - directus
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_DIRECTUS_URL: ${NEXT_PUBLIC_DIRECTUS_URL:-http://directus:8055}
+
   seeder:
     image: postgres:15
     container_name: leapy_seeder
@@ -48,8 +58,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-leapy}
       PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: admin
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     volumes:
       - ./seed:/seed:ro
     command: >

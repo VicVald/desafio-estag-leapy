@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface Talent {
@@ -53,10 +53,13 @@ export default function Home() {
   const [endDate, setEndDate] = useState('');
   const [leaderId, setLeaderId] = useState('');
   const [roleId, setRoleId] = useState('');
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [sort, setSort] = useState('email');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [selectedTalent, setSelectedTalent] = useState<Talent | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [limit, setLimit] = useState(10);
 
   // Debounce search for API calls
   useEffect(() => {
@@ -81,8 +84,9 @@ export default function Home() {
     const urlLeaderId = searchParams.get('leaderId') || '';
     const urlRoleId = searchParams.get('roleId') || '';
     const urlPage = parseInt(searchParams.get('page') || '1');
-    const urlViewMode = (searchParams.get('viewMode') as 'cards' | 'table') || 'cards';
+    const urlViewMode = (searchParams.get('viewMode') as 'cards' | 'table') || 'table';
     const urlSort = searchParams.get('sort') || '';
+    const urlLimit = parseInt(searchParams.get('limit') || '10');
 
     setSearch(urlSearch);
     setDepartment(urlDepartment);
@@ -96,6 +100,7 @@ export default function Home() {
     setPage(urlPage);
     setViewMode(urlViewMode);
     setSort(urlSort);
+    setLimit(urlLimit);
     setInitialized(true);
   }, [searchParams, initialized]);
 
@@ -116,8 +121,9 @@ export default function Home() {
       if (leaderId) params.set('leaderId', leaderId);
       if (roleId) params.set('roleId', roleId);
       if (page > 1) params.set('page', page.toString());
-      if (viewMode !== 'cards') params.set('viewMode', viewMode);
+      params.set('viewMode', viewMode);
       if (sort && sort !== 'email') params.set('sort', sort);
+      if (limit !== 10) params.set('limit', limit.toString());
 
       const queryString = params.toString();
       const newUrl = queryString ? `?${queryString}` : '';
@@ -133,12 +139,12 @@ export default function Home() {
     setPage(1);
   }, [search, department, status, pdiReady, orchestratorState, startDate, endDate, leaderId, roleId]);
 
-  const fetchTalents = async () => {
+  const fetchTalents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        limit: '10',
+        limit: limit.toString(),
         page: page.toString(),
       });
 
@@ -165,47 +171,96 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit, page, sort, debouncedSearch, department, status, pdiReady, orchestratorState, startDate, endDate, leaderId, roleId]);
 
+  // Fetch talents when initialized or filters change
   useEffect(() => {
+    if (!initialized) return;
     fetchTalents();
-  }, [page, debouncedSearch, department, status, pdiReady, orchestratorState, startDate, endDate, leaderId, roleId, sort]);
+  }, [initialized, fetchTalents]);
+
+  const exportToCSV = async () => {
+    try {
+      const params = new URLSearchParams();
+
+      if (sort && sort !== 'email') params.append('sort', sort);
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (department) params.append('department', department);
+      if (status) params.append('current_status', status);
+      if (pdiReady) params.append('pdi_plan_ready', pdiReady);
+      if (orchestratorState) params.append('orchestrator_state', orchestratorState);
+      if (startDate) params.append('start_date_gte', startDate);
+      if (endDate) params.append('end_date_lte', endDate);
+      if (leaderId) params.append('leader_id', leaderId);
+      if (roleId) params.append('target_role_id', roleId);
+
+      params.append('export', 'csv');
+
+      const response = await fetch(`/api/talents?${params}`);
+      if (!response.ok) throw new Error('Failed to export');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `talentos_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      // Could show an error message to user
+    }
+  };
 
   return (
     <div className="min-h-screen bg-base-200">
       {/* Hero Section */}
-      <div className="hero bg-base-100">
-        <div className="hero-content text-center">
-          <div className="max-w-md">
-            <h1 className="text-5xl font-bold">Lista de Talentos</h1>
-            {/* <p className="py-6">
-              Gerencie e visualize todos os talentos da plataforma com filtros avançados e paginação.
-            </p> */}
-          </div>
-        </div>
+      <div className="max-w-md mx-auto text-center mb-8">
+        <h1 className="text-5xl font-bold">Lista de Talentos</h1>
       </div>
 
       <div className="container mx-auto p-6">
         {/* Filtros */}
         <div className="card bg-base-100 shadow-xl mb-6">
           <div className="card-body">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="card-title">Filtros</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Buscar por email</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Digite o email..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="input input-bordered"
-                />
+            <div className="flex justify-between items-end mb-4 gap-4">
+              <div className="flex-1">
+                <h2 className="card-title mb-2">Filtros</h2>
+                {/* Email search - prominent at top */}
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Buscar por email</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Digite o email..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="input input-bordered w-full"
+                    aria-label="Buscar talento por email"
+                  />
+                </div>
               </div>
-
+              <div className="form-control w-48">
+                <label className="label">
+                  <span className="label-text">Itens por página</span>
+                </label>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(parseInt(e.target.value))}
+                  className="select select-bordered select-sm"
+                  aria-label="Selecionar número de itens por página"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+            {/* Other filters in grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Departamento</span>
@@ -281,6 +336,7 @@ export default function Home() {
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="input input-bordered"
+                  aria-label="Data de início do filtro"
                 />
               </div>
 
@@ -293,6 +349,7 @@ export default function Home() {
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className="input input-bordered"
+                  aria-label="Data de fim do filtro"
                 />
               </div>
 
@@ -306,6 +363,7 @@ export default function Home() {
                   value={leaderId}
                   onChange={(e) => setLeaderId(e.target.value)}
                   className="input input-bordered"
+                  aria-label="ID do líder"
                 />
               </div>
 
@@ -319,28 +377,31 @@ export default function Home() {
                   value={roleId}
                   onChange={(e) => setRoleId(e.target.value)}
                   className="input input-bordered"
+                  aria-label="ID do cargo alvo"
                 />
               </div>
             </div>
 
-                          <button
-                onClick={() => {
-                  setSearch('');
-                  setDepartment('');
-                  setStatus('');
-                  setPdiReady('');
-                  setOrchestratorState('');
-                  setStartDate('');
-                  setEndDate('');
-                  setLeaderId('');
-                  setRoleId('');
-                  setSort('');
-                  router.push('/');
-                }}
-                className="btn btn-outline btn-error"
-              >
-                🗑️ Limpar Filtros
-              </button>
+            <button
+              onClick={() => {
+                setSearch('');
+                setDepartment('');
+                setStatus('');
+                setPdiReady('');
+                setOrchestratorState('');
+                setStartDate('');
+                setEndDate('');
+                setLeaderId('');
+                setRoleId('');
+                setSort('');
+                setLimit(10);
+                router.push('/');
+              }}
+              className="btn btn-outline btn-error"
+              aria-label="Limpar todos os filtros aplicados"
+            >
+              🗑️ Limpar Filtros
+            </button>
           </div>
         </div>
 
@@ -372,14 +433,26 @@ export default function Home() {
           </p>
           <div className="flex gap-2">
             <button
+              onClick={exportToCSV}
+              disabled={talents.length === 0}
+              className="btn btn-sm btn-outline"
+              aria-label="Exportar dados para CSV"
+            >
+              📊 Exportar CSV
+            </button>
+            <button
               onClick={() => setViewMode('cards')}
               className={`btn btn-sm ${viewMode === 'cards' ? 'btn-primary' : 'btn-ghost'}`}
+              aria-pressed={viewMode === 'cards'}
+              aria-label="Visualizar em modo cards"
             >
               📄 Cards
             </button>
             <button
               onClick={() => setViewMode('table')}
               className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
+              aria-pressed={viewMode === 'table'}
+              aria-label="Visualizar em modo tabela"
             >
               📋 Tabela
             </button>
@@ -388,13 +461,92 @@ export default function Home() {
 
         {/* Estado de Carregamento e Erro */}
         {loading && (
-          <div className="flex justify-center my-8">
-            <span className="loading loading-spinner loading-lg"></span>
+          <div className="flex justify-center my-8" aria-live="polite" aria-busy="true">
+            {viewMode === 'cards' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+                {Array.from({ length: Math.min(limit, 6) }).map((_, i) => (
+                  <div key={i} className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <div className="flex items-center gap-3">
+                        <div className="skeleton h-6 w-32"></div>
+                        <div className="skeleton h-5 w-16"></div>
+                      </div>
+                      <div className="divider"></div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <div className="skeleton h-4 w-16"></div>
+                          <div className="skeleton h-4 w-24"></div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="skeleton h-4 w-20"></div>
+                          <div className="skeleton h-4 w-20"></div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="skeleton h-4 w-18"></div>
+                          <div className="skeleton h-5 w-12"></div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="skeleton h-4 w-14"></div>
+                          <div className="skeleton h-4 w-20"></div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="skeleton h-4 w-16"></div>
+                          <div className="skeleton h-4 w-22"></div>
+                        </div>
+                      </div>
+                      <div className="divider"></div>
+                      <div className="text-xs">
+                        <div className="skeleton h-3 w-32 mb-1"></div>
+                        <div className="skeleton h-3 w-28 mb-1"></div>
+                        <div className="skeleton h-3 w-36"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto w-full">
+                <table className="table table-zebra table-compact">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Telefone</th>
+                      <th>Departamento</th>
+                      <th>Status</th>
+                      <th>PDI Pronto</th>
+                      <th>Orchestrator</th>
+                      <th>Líder</th>
+                      <th>Cargo Alvo</th>
+                      <th>Data Início</th>
+                      <th>Data Fim</th>
+                      <th>Última Atualização</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: limit }).map((_, i) => (
+                      <tr key={i}>
+                        <td><div className="skeleton h-4 w-32"></div></td>
+                        <td><div className="skeleton h-4 w-24"></div></td>
+                        <td><div className="skeleton h-4 w-20"></div></td>
+                        <td><div className="skeleton h-5 w-16"></div></td>
+                        <td><div className="skeleton h-5 w-12"></div></td>
+                        <td><div className="skeleton h-5 w-14"></div></td>
+                        <td><div className="skeleton h-4 w-28"></div></td>
+                        <td><div className="skeleton h-4 w-22"></div></td>
+                        <td><div className="skeleton h-4 w-20"></div></td>
+                        <td><div className="skeleton h-4 w-18"></div></td>
+                        <td><div className="skeleton h-3 w-24"></div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
         {error && (
-          <div className="alert alert-error shadow-lg mb-6">
+          <div className="alert alert-error shadow-lg mb-6" role="alert" aria-live="assertive">
             <div>
               <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -406,9 +558,26 @@ export default function Home() {
 
         {/* Lista de Talentos */}
         {viewMode === 'cards' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="list">
             {talents.map((talent) => (
-              <div key={talent.id} className="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+              <div
+                key={talent.id}
+                className="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
+                role="listitem"
+                onClick={() => {
+                  setSelectedTalent(talent);
+                  setModalOpen(true);
+                }}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedTalent(talent);
+                    setModalOpen(true);
+                  }
+                }}
+                aria-label={`Ver detalhes de ${talent.user_email}`}
+              >
                 <div className="card-body">
                   <div className="flex items-center gap-3">
                     <div>
@@ -437,12 +606,10 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {talent.orchestrator_state && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Orchestrator:</span>
-                        <div className="badge badge-info">{talent.orchestrator_state}</div>
-                      </div>
-                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Orchestrator:</span>
+                      <div className="badge badge-info">{talent.orchestrator_state || 'N/A'}</div>
+                    </div>
 
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium">Líder:</span>
@@ -469,6 +636,7 @@ export default function Home() {
         ) : (
           <div className="overflow-x-auto">
             <table className="table table-zebra table-compact">
+              <caption className="sr-only">Lista de talentos em formato de tabela</caption>
               <thead>
                 <tr>
                   <th>Email</th>
@@ -486,7 +654,23 @@ export default function Home() {
               </thead>
               <tbody>
                 {talents.map((talent) => (
-                  <tr key={talent.id}>
+                  <tr
+                    key={talent.id}
+                    className="cursor-pointer hover:bg-base-200"
+                    onClick={() => {
+                      setSelectedTalent(talent);
+                      setModalOpen(true);
+                    }}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedTalent(talent);
+                        setModalOpen(true);
+                      }
+                    }}
+                    aria-label={`Ver detalhes de ${talent.user_email}`}
+                  >
                     <td>
                       <div className="font-bold text-sm">{talent.user_email}</div>
                     </td>
@@ -501,9 +685,7 @@ export default function Home() {
                       </div>
                     </td>
                     <td>
-                      {talent.orchestrator_state && (
-                        <div className="badge badge-info badge-sm">{talent.orchestrator_state}</div>
-                      )}
+                      <div className="badge badge-info badge-sm">{talent.orchestrator_state || 'N/A'}</div>
                     </td>
                     <td className="text-sm">{talent.leader_email}</td>
                     <td className="text-sm">{talent.target_role_name}</td>
@@ -527,16 +709,18 @@ export default function Home() {
                 onClick={() => setPage(page - 1)}
                 disabled={!hasPrev}
                 className="join-item btn"
+                aria-label="Página anterior"
               >
                 « Anterior
               </button>
-              <button className="join-item btn btn-active">
+              <button className="join-item btn btn-active" aria-current="page">
                 Página {page}
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={!hasNext}
                 className="join-item btn"
+                aria-label="Próxima página"
               >
                 Próximo »
               </button>
@@ -546,13 +730,78 @@ export default function Home() {
 
         {/* Empty State */}
         {!loading && !error && talents.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📋</div>
+          <div className="text-center py-12" role="status" aria-live="polite">
+            <div className="text-6xl mb-4" aria-hidden="true">📋</div>
             <h3 className="text-2xl font-bold mb-2">Nenhum talento encontrado</h3>
             <p className="text-base-content/70">Tente ajustar os filtros para encontrar mais resultados.</p>
           </div>
         )}
       </div>
+
+      {/* Modal de Detalhes */}
+      <dialog className={`modal ${modalOpen ? 'modal-open' : ''}`}>
+        <div className="modal-box max-w-2xl">
+          <h3 className="font-bold text-lg mb-4">Detalhes do Talento</h3>
+          {selectedTalent && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <strong>Email:</strong> {selectedTalent.user_email}
+                </div>
+                <div>
+                  <strong>Telefone:</strong> {selectedTalent.phone_number}
+                </div>
+                <div>
+                  <strong>Departamento:</strong> {selectedTalent.department}
+                </div>
+                <div>
+                  <strong>Status:</strong> {selectedTalent.current_status}
+                </div>
+                <div>
+                  <strong>PDI Pronto:</strong> {selectedTalent.pdi_plan_ready ? 'Sim' : 'Não'}
+                </div>
+                <div>
+                  <strong>Estado do Orchestrator:</strong> {selectedTalent.orchestrator_state || 'N/A'}
+                </div>
+                <div>
+                  <strong>Líder:</strong> {selectedTalent.leader_email}
+                </div>
+                <div>
+                  <strong>Cargo Alvo:</strong> {selectedTalent.target_role_name}
+                </div>
+                <div>
+                  <strong>Data de Início:</strong> {new Date(selectedTalent.start_date).toLocaleDateString('pt-BR')}
+                </div>
+                <div>
+                  <strong>Data de Fim:</strong> {new Date(selectedTalent.end_date).toLocaleDateString('pt-BR')}
+                </div>
+                <div>
+                  <strong>Última Atualização:</strong> {new Date(selectedTalent.date_updated).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
+              <div className="modal-action">
+                <a
+                  href={`mailto:${selectedTalent.user_email}`}
+                  className="btn btn-primary"
+                  aria-label={`Enviar email para ${selectedTalent.user_email}`}
+                >
+                  📧 Enviar Email
+                </a>
+                <button
+                  className="btn"
+                  onClick={() => setModalOpen(false)}
+                  aria-label="Fechar modal"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <form method="dialog" className="modal-backdrop" onClick={() => setModalOpen(false)}>
+          <button type="button" aria-label="Fechar modal">Fechar</button>
+        </form>
+      </dialog>
     </div>
   );
 }
